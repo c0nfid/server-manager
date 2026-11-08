@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Map
 import androidx.compose.material.icons.filled.NetworkCheck
 import androidx.compose.material.icons.filled.Router
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.VpnKey
@@ -130,6 +131,7 @@ fun ServerDetailScreen(
     onMonitor: () -> Unit,
     onPortBind: () -> Unit,
     onKeySetup: () -> Unit,
+    onSecurity: () -> Unit,
 ) {
     val vm: ServerDetailViewModel = viewModel(key = "detail-$serverId") { ServerDetailViewModel(serverId) }
     val state by vm.state.collectAsStateWithLifecycle()
@@ -168,6 +170,10 @@ fun ServerDetailScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 ActionTile("Мониторинг", Icons.Filled.Speed, Modifier.weight(1f), onMonitor)
                 ActionTile("PortBind", Icons.Filled.Router, Modifier.weight(1f), onPortBind)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                ActionTile("Безопасность", Icons.Filled.Shield, Modifier.weight(1f), onSecurity)
+                Spacer(Modifier.weight(1f))
             }
 
             SectionCard(title = "Подключение", icon = Icons.Filled.NetworkCheck) {

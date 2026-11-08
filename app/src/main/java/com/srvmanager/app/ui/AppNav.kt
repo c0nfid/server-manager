@@ -11,6 +11,7 @@ import com.srvmanager.app.ui.backup.BackupScreen
 import com.srvmanager.app.ui.keys.KeysScreen
 import com.srvmanager.app.ui.monitor.MonitorScreen
 import com.srvmanager.app.ui.portbind.PortBindScreen
+import com.srvmanager.app.ui.security.SecurityScreen
 import com.srvmanager.app.ui.servers.KeySetupScreen
 import com.srvmanager.app.ui.servers.ServerDetailScreen
 import com.srvmanager.app.ui.servers.ServerEditScreen
@@ -59,6 +60,7 @@ fun AppNav() {
                 onMonitor = { nav.navigate("server/$id/monitor") },
                 onPortBind = { nav.navigate("server/$id/portbind") },
                 onKeySetup = { nav.navigate("server/$id/keysetup") },
+                onSecurity = { nav.navigate("server/$id/security") },
             )
         }
         composable("server/{id}/terminal") { entry ->
@@ -72,6 +74,9 @@ fun AppNav() {
         }
         composable("server/{id}/portbind") { entry ->
             PortBindScreen(serverId = entry.arguments?.getString("id").orEmpty(), onBack = { nav.back() })
+        }
+        composable("server/{id}/security") { entry ->
+            SecurityScreen(serverId = entry.arguments?.getString("id").orEmpty(), onBack = { nav.back() })
         }
         composable("server/{id}/keysetup") { entry ->
             KeySetupScreen(serverId = entry.arguments?.getString("id").orEmpty(), onBack = { nav.back() })
