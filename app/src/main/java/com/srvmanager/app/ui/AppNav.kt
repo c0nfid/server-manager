@@ -1,5 +1,6 @@
 package com.srvmanager.app.ui
 
+import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -8,6 +9,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.srvmanager.app.ui.backup.BackupScreen
+import com.srvmanager.app.ui.docker.DockerScreen
 import com.srvmanager.app.ui.keys.KeysScreen
 import com.srvmanager.app.ui.monitor.MonitorScreen
 import com.srvmanager.app.ui.portbind.PortBindScreen
@@ -65,10 +67,22 @@ fun AppNav() {
                 onSecurity = { nav.navigate("server/$id/security") },
                 onUfw = { nav.navigate("server/$id/ufw") },
                 onProcesses = { nav.navigate("server/$id/processes") },
+                onDocker = { nav.navigate("server/$id/docker") },
             )
         }
-        composable("server/{id}/terminal") { entry ->
-            TerminalScreen(serverId = entry.arguments?.getString("id").orEmpty(), onBack = { nav.back() })
+        composable(
+            route = "server/{id}/terminal?cmd={cmd}",
+            arguments = listOf(navArgument("cmd") {
+                type = NavType.StringType
+                nullable = true
+                defaultValue = null
+            }),
+        ) { entry ->
+            TerminalScreen(
+                serverId = entry.arguments?.getString("id").orEmpty(),
+                onBack = { nav.back() },
+                initialCommand = entry.arguments?.getString("cmd"),
+            )
         }
         composable("server/{id}/sftp") { entry ->
             SftpScreen(serverId = entry.arguments?.getString("id").orEmpty(), onBack = { nav.back() })
@@ -87,6 +101,14 @@ fun AppNav() {
         }
         composable("server/{id}/processes") { entry ->
             ProcessesScreen(serverId = entry.arguments?.getString("id").orEmpty(), onBack = { nav.back() })
+        }
+        composable("server/{id}/docker") { entry ->
+            val id = entry.arguments?.getString("id").orEmpty()
+            DockerScreen(
+                serverId = id,
+                onBack = { nav.back() },
+                onOpenShell = { cmd -> nav.navigate("server/$id/terminal?cmd=${Uri.encode(cmd)}") },
+            )
         }
         composable("server/{id}/keysetup") { entry ->
             KeySetupScreen(serverId = entry.arguments?.getString("id").orEmpty(), onBack = { nav.back() })

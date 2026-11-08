@@ -55,8 +55,8 @@ import com.srvmanager.app.ui.common.AppScaffold
 import com.srvmanager.app.ui.common.ErrorCard
 import com.srvmanager.app.ui.common.copyToClipboard
 
-class TerminalViewModel(serverId: String) : ViewModel() {
-    val session = TerminalSession(serverId)
+class TerminalViewModel(serverId: String, initialCommand: String?) : ViewModel() {
+    val session = TerminalSession(serverId, initialCommand)
 
     override fun onCleared() {
         session.close()
@@ -114,8 +114,10 @@ private val EXTRA_KEYS: List<ExtraKey> = listOf(
 )
 
 @Composable
-fun TerminalScreen(serverId: String, onBack: () -> Unit) {
-    val vm: TerminalViewModel = viewModel(key = "terminal-$serverId") { TerminalViewModel(serverId) }
+fun TerminalScreen(serverId: String, onBack: () -> Unit, initialCommand: String? = null) {
+    val vm: TerminalViewModel = viewModel(key = "terminal-$serverId-${initialCommand.hashCode()}") {
+        TerminalViewModel(serverId, initialCommand)
+    }
     val session = vm.session
     val status by session.status.collectAsStateWithLifecycle()
     val error by session.error.collectAsStateWithLifecycle()

@@ -18,7 +18,8 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
 /** Интерактивная SSH-сессия (канал shell с PTY), связанная с эмулятором. */
-class TerminalSession(private val serverId: String) {
+/** [initialCommand] — команда, которая вводится сразу после открытия shell (например, docker exec). */
+class TerminalSession(private val serverId: String, private val initialCommand: String? = null) {
     enum class Status { IDLE, CONNECTING, CONNECTED, CLOSED, ERROR }
 
     val emulator = TerminalEmulator(80, 24)
@@ -94,6 +95,7 @@ class TerminalSession(private val serverId: String) {
                 status.value = Status.CONNECTED
                 // Размер View мог измениться, пока открывался канал (анимация клавиатуры).
                 execute { shell.setPtySize(cols, rows, widthPx, heightPx) }
+                if (!initialCommand.isNullOrBlank()) writeText(initialCommand + "\r")
                 val buffer = ByteArray(16 * 1024)
                 while (isActive) {
                     val n = try {

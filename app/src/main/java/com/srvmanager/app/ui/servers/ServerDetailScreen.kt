@@ -20,6 +20,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Map
@@ -136,6 +137,7 @@ fun ServerDetailScreen(
     onSecurity: () -> Unit,
     onUfw: () -> Unit,
     onProcesses: () -> Unit,
+    onDocker: () -> Unit,
 ) {
     val vm: ServerDetailViewModel = viewModel(key = "detail-$serverId") { ServerDetailViewModel(serverId) }
     val state by vm.state.collectAsStateWithLifecycle()
@@ -181,7 +183,7 @@ fun ServerDetailScreen(
             }
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 ActionTile("Процессы и службы", Icons.Filled.Memory, Modifier.weight(1f), onProcesses)
-                Spacer(Modifier.weight(1f))
+                ActionTile("Docker", Icons.Filled.Hub, Modifier.weight(1f), onDocker)
             }
 
             SectionCard(title = "Подключение", icon = Icons.Filled.NetworkCheck) {
