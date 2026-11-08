@@ -7,15 +7,13 @@ import com.srvmanager.app.security.SecurityClient
 import com.srvmanager.app.security.SecurityStatus
 import com.srvmanager.app.ssh.SshManager
 import com.srvmanager.app.ssh.friendlyMessage
+import com.srvmanager.app.ui.common.Step
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-
-/** Шаг операции для журнала на экране. ok = null — шаг выполняется. */
-data class Step(val text: String, val ok: Boolean?, val output: String = "")
 
 class SecurityViewModel(private val serverId: String) : ViewModel() {
     data class UiState(

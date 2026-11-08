@@ -51,6 +51,7 @@ import com.srvmanager.app.ui.common.ErrorCard
 import com.srvmanager.app.ui.common.LabeledValue
 import com.srvmanager.app.ui.common.OutputBlock
 import com.srvmanager.app.ui.common.SectionCard
+import com.srvmanager.app.ui.common.StepsCard
 import com.srvmanager.app.ui.theme.StatusColors
 
 @Composable
@@ -232,28 +233,5 @@ private fun SshPortCard(status: SecurityStatus, busy: Boolean, onChange: (Int, B
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-    }
-}
-
-@Composable
-private fun StepsCard(steps: List<Step>) {
-    SectionCard(title = "Ход выполнения") {
-        steps.forEach { s ->
-            Row(verticalAlignment = Alignment.Top, modifier = Modifier.padding(vertical = 4.dp)) {
-                when (s.ok) {
-                    null -> CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                    true -> Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = StatusColors.ok, modifier = Modifier.size(18.dp))
-                    false -> Icon(Icons.Filled.Error, contentDescription = null, tint = StatusColors.bad, modifier = Modifier.size(18.dp))
-                }
-                Spacer(Modifier.width(8.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(s.text, style = MaterialTheme.typography.bodyMedium)
-                    if (s.output.isNotBlank()) {
-                        Spacer(Modifier.height(4.dp))
-                        OutputBlock(s.output, maxLines = 20)
-                    }
-                }
-            }
-        }
     }
 }

@@ -18,6 +18,7 @@ import com.srvmanager.app.ui.servers.ServerEditScreen
 import com.srvmanager.app.ui.servers.ServerListScreen
 import com.srvmanager.app.ui.sftp.SftpScreen
 import com.srvmanager.app.ui.terminal.TerminalScreen
+import com.srvmanager.app.ui.ufw.UfwScreen
 
 private fun NavHostController.back() {
     if (previousBackStackEntry != null) popBackStack()
@@ -61,6 +62,7 @@ fun AppNav() {
                 onPortBind = { nav.navigate("server/$id/portbind") },
                 onKeySetup = { nav.navigate("server/$id/keysetup") },
                 onSecurity = { nav.navigate("server/$id/security") },
+                onUfw = { nav.navigate("server/$id/ufw") },
             )
         }
         composable("server/{id}/terminal") { entry ->
@@ -77,6 +79,9 @@ fun AppNav() {
         }
         composable("server/{id}/security") { entry ->
             SecurityScreen(serverId = entry.arguments?.getString("id").orEmpty(), onBack = { nav.back() })
+        }
+        composable("server/{id}/ufw") { entry ->
+            UfwScreen(serverId = entry.arguments?.getString("id").orEmpty(), onBack = { nav.back() })
         }
         composable("server/{id}/keysetup") { entry ->
             KeySetupScreen(serverId = entry.arguments?.getString("id").orEmpty(), onBack = { nav.back() })
