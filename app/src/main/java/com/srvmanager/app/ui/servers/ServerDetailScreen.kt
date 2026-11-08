@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.LinkOff
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Map
+import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material.icons.filled.NetworkCheck
 import androidx.compose.material.icons.filled.Router
 import androidx.compose.material.icons.filled.Security
@@ -134,6 +135,7 @@ fun ServerDetailScreen(
     onKeySetup: () -> Unit,
     onSecurity: () -> Unit,
     onUfw: () -> Unit,
+    onProcesses: () -> Unit,
 ) {
     val vm: ServerDetailViewModel = viewModel(key = "detail-$serverId") { ServerDetailViewModel(serverId) }
     val state by vm.state.collectAsStateWithLifecycle()
@@ -176,6 +178,10 @@ fun ServerDetailScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 ActionTile("Безопасность", Icons.Filled.Shield, Modifier.weight(1f), onSecurity)
                 ActionTile("Файрвол UFW", Icons.Filled.Security, Modifier.weight(1f), onUfw)
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                ActionTile("Процессы и службы", Icons.Filled.Memory, Modifier.weight(1f), onProcesses)
+                Spacer(Modifier.weight(1f))
             }
 
             SectionCard(title = "Подключение", icon = Icons.Filled.NetworkCheck) {
