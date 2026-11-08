@@ -282,7 +282,7 @@ private fun InstallCard(status: PortBindStatus, server: Server?, busy: Boolean, 
                     TextButton(onClick = { vm.checkRoot() }, enabled = !busy) { Text("Проверить права") }
                 }
             }
-            if (!server.isRoot && server.elevation == Elevation.SUDO && status.privilege == "none") {
+            if (!server.isRoot && server.elevation != Elevation.SU && status.privilege == "none") {
                 Text(
                     "На сервере нет sudo. Откройте настройки сервера → «Права root» и выберите su с паролем root.",
                     color = MaterialTheme.colorScheme.error,

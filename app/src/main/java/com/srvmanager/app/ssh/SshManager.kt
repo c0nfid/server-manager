@@ -170,9 +170,30 @@ class SshConnection internal constructor(val server: Server, internal val sessio
         val inner = Sh.quote("eval \"\$(echo $b64 | base64 -d)\" </dev/null")
         if (!asRoot || server.isRoot) return exec("sh -c $inner", null, timeoutMs)
         return when (server.elevation) {
+            Elevation.SUDO_SU -> runSudoSu(inner, timeoutMs)
             Elevation.SUDO -> runSudo(inner, timeoutMs)
             Elevation.SU -> runSu(inner, timeoutMs)
         }
+    }
+
+    /**
+     * `sudo su`, затем команда от root. Скрипт подаётся root-оболочке через stdin,
+     * поэтому подходит даже правило sudoers, разрешающее только `su` без аргументов.
+     * Сначала без пароля (NOPASSWD); если sudo попросит пароль — с паролем sudo/входа.
+     */
+    private suspend fun runSudoSu(inner: String, timeoutMs: Long): ExecResult {
+        val payload = "exec sh -c $inner\n"
+        var result = exec("env LC_ALL=C sudo -n su", payload.toByteArray(Charsets.UTF_8), timeoutMs)
+        if (!result.ok && result.stderr.contains("password is required")) {
+            val password = server.elevationPassword.ifEmpty { server.password }
+            if (password.isEmpty()) {
+                throw SudoException("sudo su запросил пароль: укажите пароль sudo в настройках сервера (раздел «Права root»)")
+            }
+            // sudo -S читает из stdin ровно одну строку с паролем, остальное получает оболочка root.
+            result = exec("env LC_ALL=C sudo -S -p '' su", (password + "\n" + payload).toByteArray(Charsets.UTF_8), timeoutMs)
+        }
+        checkSudo(result)
+        return result
     }
 
     private suspend fun runSudo(inner: String, timeoutMs: Long): ExecResult {
@@ -181,6 +202,10 @@ class SshConnection internal constructor(val server: Server, internal val sessio
             exec("env LC_ALL=C sudo -S -p '' sh -c $inner", (password + "\n").toByteArray(Charsets.UTF_8), timeoutMs)
         } else {
             exec("env LC_ALL=C sudo -n sh -c $inner", null, timeoutMs)
+        }
+        if (!result.ok && result.stderr.contains("not allowed to execute")) {
+            // Прямой sudo запрещён правилами sudoers — пробуем `sudo su`.
+            return runSudoSu(inner, timeoutMs)
         }
         if (!result.ok && password.isNotEmpty() && result.stderr.requiresTty()) {
             // sudo с requiretty: повторяем в терминале с уникальным приглашением.

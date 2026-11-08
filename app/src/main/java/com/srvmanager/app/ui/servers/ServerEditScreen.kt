@@ -85,7 +85,7 @@ fun ServerEditScreen(serverId: String?, onDone: () -> Unit, onDeleted: () -> Uni
     var testing by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<ConnectionTest?>(null) }
     var testError by remember { mutableStateOf<Throwable?>(null) }
-    var elevation by rememberSaveable { mutableStateOf(existing?.elevation ?: Elevation.SUDO) }
+    var elevation by rememberSaveable { mutableStateOf(existing?.elevation ?: Elevation.SUDO_SU) }
     var elevationPassword by rememberSaveable { mutableStateOf(existing?.elevationPassword.orEmpty()) }
     var showElevationPassword by rememberSaveable { mutableStateOf(false) }
     var rootChecking by remember { mutableStateOf(false) }
@@ -264,6 +264,11 @@ fun ServerEditScreen(serverId: String?, onDone: () -> Unit, onDeleted: () -> Uni
                     Spacer(Modifier.height(8.dp))
                     ChipRow {
                         FilterChip(
+                            selected = elevation == Elevation.SUDO_SU,
+                            onClick = { elevation = Elevation.SUDO_SU },
+                            label = { Text("sudo su") },
+                        )
+                        FilterChip(
                             selected = elevation == Elevation.SUDO,
                             onClick = { elevation = Elevation.SUDO },
                             label = { Text("sudo") },
@@ -279,7 +284,7 @@ fun ServerEditScreen(serverId: String?, onDone: () -> Unit, onDeleted: () -> Uni
                         value = elevationPassword,
                         onValueChange = { elevationPassword = it },
                         label = {
-                            Text(if (elevation == Elevation.SU) "Пароль root" else "Пароль sudo (пусто — пароль входа)")
+                            Text(if (elevation == Elevation.SU) "Пароль root" else "Пароль sudo (если запросит; пусто — пароль входа)")
                         },
                         singleLine = true,
                         isError = elevation == Elevation.SU && elevationPassword.isEmpty(),
@@ -299,10 +304,12 @@ fun ServerEditScreen(serverId: String?, onDone: () -> Unit, onDeleted: () -> Uni
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Text(
-                        if (elevation == Elevation.SU) {
-                            "su подходит, если пользователя нет в sudoers. На Ubuntu у root обычно нет пароля — там нужен sudo."
-                        } else {
-                            "Пользователь должен быть в группе sudo (или в /etc/sudoers)."
+                        when (elevation) {
+                            Elevation.SUDO_SU ->
+                                "Сначала выполняется sudo su, затем команды от root. Если sudo su работает без пароля " +
+                                    "(NOPASSWD), пароль не нужен; иначе используется пароль sudo."
+                            Elevation.SUDO -> "Команды запускаются через sudo напрямую; пользователь должен быть в группе sudo."
+                            Elevation.SU -> "su подходит, если пользователя нет в sudoers. На Ubuntu у root обычно нет пароля — там нужен sudo."
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
