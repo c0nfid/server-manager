@@ -13,6 +13,7 @@ import com.jcraft.jsch.Session
 import com.jcraft.jsch.UserInfo
 import com.srvmanager.app.Graph
 import com.srvmanager.app.data.AuthType
+import com.srvmanager.app.data.Elevation
 import com.srvmanager.app.data.Server
 import com.srvmanager.app.data.SshKey
 import kotlinx.coroutines.Dispatchers
@@ -161,40 +162,170 @@ class SshConnection internal constructor(val server: Server, internal val sessio
 
     /**
      * Запускает POSIX-скрипт независимо от login shell пользователя: текст передаётся в base64
-     * и исполняется через `sh -c 'eval ...'` со stdin=/dev/null. При [asRoot] используется sudo,
-     * пароль передаётся через stdin (sudo -S), а не в командной строке.
+     * и исполняется через `sh -c 'eval ...'` со stdin=/dev/null. При [asRoot] root получается
+     * способом из настроек сервера ([Server.elevation]): sudo (пароль через stdin) или su (через PTY).
      */
     suspend fun runScript(script: String, asRoot: Boolean = false, timeoutMs: Long = 120_000): ExecResult {
         val b64 = Base64.encodeToString(script.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
         val inner = Sh.quote("eval \"\$(echo $b64 | base64 -d)\" </dev/null")
         if (!asRoot || server.isRoot) return exec("sh -c $inner", null, timeoutMs)
-        val password = server.password
+        return when (server.elevation) {
+            Elevation.SUDO -> runSudo(inner, timeoutMs)
+            Elevation.SU -> runSu(inner, timeoutMs)
+        }
+    }
+
+    private suspend fun runSudo(inner: String, timeoutMs: Long): ExecResult {
+        val password = server.elevationPassword.ifEmpty { server.password }
         val result = if (password.isNotEmpty()) {
             exec("env LC_ALL=C sudo -S -p '' sh -c $inner", (password + "\n").toByteArray(Charsets.UTF_8), timeoutMs)
         } else {
             exec("env LC_ALL=C sudo -n sh -c $inner", null, timeoutMs)
         }
+        if (!result.ok && password.isNotEmpty() && result.stderr.requiresTty()) {
+            // sudo с requiretty: повторяем в терминале с уникальным приглашением.
+            val retry = execWithPassword(
+                command = "env LC_ALL=C sudo -p ${Sh.quote(SUDO_PROMPT)} sh -c $inner",
+                password = password,
+                requirePrompt = false,
+                isPrompt = { it.contains(SUDO_PROMPT) },
+                timeoutMs = timeoutMs,
+            )
+            checkSudo(retry.copy(stderr = retry.stdout))
+            return retry
+        }
         checkSudo(result)
         return result
     }
 
+    /** su читает пароль только с терминала, поэтому команда выполняется в PTY. */
+    private suspend fun runSu(inner: String, timeoutMs: Long): ExecResult {
+        val rootPassword = server.elevationPassword
+        if (rootPassword.isEmpty()) {
+            throw SudoException("Для su нужен пароль root: укажите его в настройках сервера (раздел «Права root»)")
+        }
+        val result = execWithPassword(
+            command = "env LC_ALL=C su -c ${Sh.quote("sh -c $inner")} root",
+            password = rootPassword,
+            requirePrompt = true,
+            isPrompt = { it.trimEnd().endsWith(":") },
+            timeoutMs = timeoutMs,
+        )
+        checkSu(result)
+        return result
+    }
+
+    /**
+     * Выполняет команду в PTY: ждёт приглашение пароля ([isPrompt]), один раз отправляет [password]
+     * и собирает вывод. В PTY stdout и stderr объединены, поэтому весь вывод попадает в stdout.
+     */
+    private suspend fun execWithPassword(
+        command: String,
+        password: String,
+        requirePrompt: Boolean,
+        isPrompt: (String) -> Boolean,
+        timeoutMs: Long,
+    ): ExecResult = withContext(Dispatchers.IO) {
+        val channel = session.openChannel("exec") as ChannelExec
+        try {
+            channel.setCommand(command)
+            channel.setPty(true)
+            channel.setPtyType("dumb", 512, 50, 0, 0)
+            val input = channel.inputStream
+            channel.connect(15_000)
+            val output = channel.outputStream
+            val collected = ByteArrayOutputStream()
+            val chunk = ByteArray(8192)
+            fun drain() {
+                while (input.available() > 0) {
+                    val n = input.read(chunk)
+                    if (n <= 0) break
+                    collected.write(chunk, 0, n)
+                }
+            }
+
+            val promptDeadline = SystemClock.elapsedRealtime() + 15_000
+            var sent = false
+            while (!sent && !channel.isClosed && SystemClock.elapsedRealtime() < promptDeadline) {
+                drain()
+                if (isPrompt(String(collected.toByteArray(), Charsets.UTF_8))) {
+                    output.write((password + "\n").toByteArray(Charsets.UTF_8))
+                    output.flush()
+                    collected.reset()
+                    sent = true
+                } else {
+                    delay(30)
+                }
+            }
+            if (!sent && requirePrompt && !channel.isClosed) {
+                throw IOException("Не дождались запроса пароля: ${String(collected.toByteArray(), Charsets.UTF_8).takeLast(200)}")
+            }
+
+            val deadline = SystemClock.elapsedRealtime() + timeoutMs
+            while (!channel.isClosed) {
+                drain()
+                if (SystemClock.elapsedRealtime() > deadline) {
+                    throw IOException("Команда не завершилась за ${timeoutMs / 1000} с")
+                }
+                delay(40)
+            }
+            drain()
+            val text = String(collected.toByteArray(), Charsets.UTF_8)
+                .replace("\r\n", "\n")
+                .replace('\r', '\n')
+                .trimStart('\n')
+            ExecResult(channel.exitStatus, text, "")
+        } finally {
+            channel.disconnect()
+        }
+    }
+
+    private fun String.requiresTty(): Boolean =
+        contains("a terminal is required") || contains("must have a tty") || contains("no tty present")
+
     private fun checkSudo(result: ExecResult) {
         if (result.ok) return
         val err = result.stderr
+        val user = server.username
         val message = when {
             result.exitCode == 127 && err.contains("sudo") ->
-                "На сервере нет sudo. Подключайтесь как root или установите sudo."
+                "На сервере нет sudo. В настройках сервера выберите «su» и укажите пароль root."
             err.contains("incorrect password", ignoreCase = true) || err.contains("Sorry, try again") ->
-                "sudo: неверный пароль пользователя ${server.username}"
+                "sudo: неверный пароль пользователя $user. Укажите пароль sudo в настройках сервера."
             err.contains("a password is required") || err.contains("no password was provided") ->
-                "sudo требует пароль: сохраните пароль пользователя в настройках сервера"
-            err.contains("is not in the sudoers") || err.contains("not allowed to execute") ->
-                "Пользователь ${server.username} не имеет прав sudo"
-            err.contains("a terminal is required") || err.contains("must have a tty") ->
-                "sudo требует терминал (requiretty). Отключите requiretty или используйте root"
+                "sudo требует пароль: сохраните пароль пользователя $user в настройках сервера"
+            err.contains("is not in the sudoers") || err.contains("not allowed to execute") ||
+                err.contains("may not run sudo") ->
+                "Пользователь $user не имеет прав sudo. Выберите «su» и укажите пароль root, " +
+                    "либо добавьте пользователя в группу sudo (usermod -aG sudo $user)."
+            err.requiresTty() -> "sudo требует терминал (requiretty) и пароль"
             else -> null
         }
         if (message != null) throw SudoException(message)
+    }
+
+    private fun checkSu(result: ExecResult) {
+        if (result.ok) return
+        val out = result.stdout
+        val message = when {
+            out.contains("Authentication failure", ignoreCase = true) || out.contains("incorrect password", ignoreCase = true) ->
+                "su: неверный пароль root. На Ubuntu у root по умолчанию нет пароля — там используйте sudo."
+            out.contains("does not exist") || out.contains("unknown user", ignoreCase = true) -> "su: пользователь root не найден"
+            out.contains("Permission denied") && out.contains("su") -> "su: запуск запрещён для пользователя ${server.username}"
+            result.exitCode == 127 && out.contains("su") -> "На сервере нет su"
+            else -> null
+        }
+        if (message != null) throw SudoException(message)
+    }
+
+    /** Проверяет, что выбранный способ действительно даёт root. */
+    suspend fun checkRoot(): String {
+        val r = runScript("id -u", asRoot = true, timeoutMs = 30_000)
+        val uid = r.stdout.lines().map { it.trim() }.lastOrNull { it.isNotEmpty() }
+        if (!r.ok || uid != "0") {
+            throw SudoException("Права root не получены (код ${r.exitCode}): ${r.combined.take(300).ifBlank { "нет вывода" }}")
+        }
+        return "Права root получены: ${server.elevationLabel}"
     }
 
     suspend fun openSftp(): ChannelSftp = withContext(Dispatchers.IO) {
@@ -217,6 +348,9 @@ class SshConnection internal constructor(val server: Server, internal val sessio
 }
 
 data class ConnectionTest(val latencyMs: Long, val serverVersion: String?, val hostKey: HostKeyInfo?)
+
+/** Уникальное приглашение sudo в режиме PTY — не спутать с выводом команды. */
+private const val SUDO_PROMPT = "[srvmanager-sudo-password]:"
 
 object SshManager {
     private val connections = ConcurrentHashMap<String, SshConnection>()
@@ -330,6 +464,16 @@ object SshManager {
             }
         }
         OpenedSession(session, hostKey)
+    }
+
+    /** Проверка прав root для черновика сервера (в т.ч. не сохранённого), отдельной сессией. */
+    suspend fun testRoot(server: Server): String {
+        val opened = openSession(server, AuthMode.AUTO, persistHostKey = false)
+        try {
+            return SshConnection(server, opened.session).checkRoot()
+        } finally {
+            opened.session.disconnect()
+        }
     }
 
     /**

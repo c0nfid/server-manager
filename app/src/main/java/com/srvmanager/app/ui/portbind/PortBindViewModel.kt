@@ -8,6 +8,7 @@ import com.srvmanager.app.portbind.PortBindStatus
 import com.srvmanager.app.portbind.PortRule
 import com.srvmanager.app.portbind.portbindExitHint
 import com.srvmanager.app.ssh.ExecResult
+import com.srvmanager.app.ssh.SshManager
 import com.srvmanager.app.ssh.friendlyMessage
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,7 +25,7 @@ data class LogEntry(
     val ok: Boolean get() = exitCode == 0
 }
 
-class PortBindViewModel(serverId: String) : ViewModel() {
+class PortBindViewModel(private val serverId: String) : ViewModel() {
     data class UiState(
         val loading: Boolean = true,
         val busy: String? = null,
@@ -113,6 +114,11 @@ class PortBindViewModel(serverId: String) : ViewModel() {
 
     fun install() = operation("Установка portbind ${PortBindClient.bundledVersion}", "install", reloadStatus = true) {
         client.install()
+    }
+
+    /** Проверяет, что выбранный в настройках способ (sudo/su) даёт root. */
+    fun checkRoot() = operation("Проверка прав root", "check") {
+        ExecResult(0, SshManager.withConnection(serverId) { it.checkRoot() }, "")
     }
 
     fun installDependencies() = operation("Установка зависимостей", "deps", reloadStatus = true) {

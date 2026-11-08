@@ -173,6 +173,7 @@ fun ServerDetailScreen(
             SectionCard(title = "Подключение", icon = Icons.Filled.NetworkCheck) {
                 LabeledValue("Адрес", "${current.host}:${current.port}", monospace = true)
                 LabeledValue("Пользователь", current.username)
+                LabeledValue("Права root", current.elevationLabel)
                 LabeledValue(
                     "Вход",
                     if (current.authType == AuthType.KEY) {

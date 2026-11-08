@@ -59,6 +59,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.srvmanager.app.Graph
+import com.srvmanager.app.data.Elevation
+import com.srvmanager.app.data.Server
 import com.srvmanager.app.portbind.PortBindClient
 import com.srvmanager.app.portbind.PortBindStatus
 import com.srvmanager.app.portbind.PortBindValidation
@@ -123,7 +125,7 @@ fun PortBindScreen(serverId: String, onBack: () -> Unit) {
             state.error?.let { e -> item { ErrorCard(e, onRetry = { vm.reload() }) } }
 
             if (status != null) {
-                item { InstallCard(status, busy, vm) }
+                item { InstallCard(status, server, busy, vm) }
                 if (status.installed) {
                     item { AutomationCard(status, busy, vm, onCron = { dialog = PbDialog.Cron }) }
                     item {
@@ -257,7 +259,7 @@ private fun ruleLine(rule: PortRule): String =
         if (rule.bindHost != "*") " (вход ${rule.bindHost})" else ""
 
 @Composable
-private fun InstallCard(status: PortBindStatus, busy: Boolean, vm: PortBindViewModel) {
+private fun InstallCard(status: PortBindStatus, server: Server?, busy: Boolean, vm: PortBindViewModel) {
     val bundled = PortBindClient.bundledVersion
     SectionCard(title = "Установка", icon = Icons.Filled.Router) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -268,13 +270,32 @@ private fun InstallCard(status: PortBindStatus, busy: Boolean, vm: PortBindViewM
                 style = MaterialTheme.typography.bodyMedium,
             )
         }
-        if (status.privilege == "none") {
+        if (server != null) {
             Spacer(Modifier.height(6.dp))
-            Text(
-                "На сервере нет sudo, а пользователь не root — управление portbind невозможно.",
-                color = MaterialTheme.colorScheme.error,
-                style = MaterialTheme.typography.bodySmall,
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Команды от root: ${server.elevationLabel}",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.weight(1f),
+                )
+                if (!server.isRoot) {
+                    TextButton(onClick = { vm.checkRoot() }, enabled = !busy) { Text("Проверить права") }
+                }
+            }
+            if (!server.isRoot && server.elevation == Elevation.SUDO && status.privilege == "none") {
+                Text(
+                    "На сервере нет sudo. Откройте настройки сервера → «Права root» и выберите su с паролем root.",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            if (!server.isRoot && server.elevation == Elevation.SU && server.elevationPassword.isEmpty()) {
+                Text(
+                    "Выбран su, но пароль root не указан — задайте его в настройках сервера.",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
         }
         if (!status.bashOk) {
             Spacer(Modifier.height(6.dp))

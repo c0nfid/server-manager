@@ -15,6 +15,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.NetworkCheck
@@ -49,6 +50,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.srvmanager.app.Graph
 import com.srvmanager.app.data.AuthType
+import com.srvmanager.app.data.Elevation
 import com.srvmanager.app.data.Server
 import com.srvmanager.app.ssh.ConnectionTest
 import com.srvmanager.app.ssh.HostKeyMismatchException
@@ -83,6 +85,12 @@ fun ServerEditScreen(serverId: String?, onDone: () -> Unit, onDeleted: () -> Uni
     var testing by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf<ConnectionTest?>(null) }
     var testError by remember { mutableStateOf<Throwable?>(null) }
+    var elevation by rememberSaveable { mutableStateOf(existing?.elevation ?: Elevation.SUDO) }
+    var elevationPassword by rememberSaveable { mutableStateOf(existing?.elevationPassword.orEmpty()) }
+    var showElevationPassword by rememberSaveable { mutableStateOf(false) }
+    var rootChecking by remember { mutableStateOf(false) }
+    var rootResult by remember { mutableStateOf<String?>(null) }
+    var rootError by remember { mutableStateOf<Throwable?>(null) }
 
     val portValue = port.trim().toIntOrNull()
     val hostError = when {
@@ -113,6 +121,8 @@ fun ServerEditScreen(serverId: String?, onDone: () -> Unit, onDeleted: () -> Uni
             hostKeyType = if (endpointChanged) null else hostKeyType,
             hostKeyFingerprint = if (endpointChanged) null else hostKeyFp,
             geo = if (existing != null && existing.host != trimmedHost) null else base.geo,
+            elevation = elevation,
+            elevationPassword = elevationPassword,
         )
     }
 
@@ -240,6 +250,91 @@ fun ServerEditScreen(serverId: String?, onDone: () -> Unit, onDeleted: () -> Uni
                             }
                         }
                     }
+                }
+            }
+
+            if (username.trim() != "root") {
+                SectionCard(title = "Права root") {
+                    Text(
+                        "PortBind и другие операции администрирования выполняются от root. " +
+                            "Выберите, как получать права, если вход не под root.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    ChipRow {
+                        FilterChip(
+                            selected = elevation == Elevation.SUDO,
+                            onClick = { elevation = Elevation.SUDO },
+                            label = { Text("sudo") },
+                        )
+                        FilterChip(
+                            selected = elevation == Elevation.SU,
+                            onClick = { elevation = Elevation.SU },
+                            label = { Text("su (пароль root)") },
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = elevationPassword,
+                        onValueChange = { elevationPassword = it },
+                        label = {
+                            Text(if (elevation == Elevation.SU) "Пароль root" else "Пароль sudo (пусто — пароль входа)")
+                        },
+                        singleLine = true,
+                        isError = elevation == Elevation.SU && elevationPassword.isEmpty(),
+                        supportingText = {
+                            if (elevation == Elevation.SU && elevationPassword.isEmpty()) Text("Для su нужен пароль root")
+                        },
+                        visualTransformation = if (showElevationPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        trailingIcon = {
+                            IconButton(onClick = { showElevationPassword = !showElevationPassword }) {
+                                Icon(
+                                    if (showElevationPassword) Icons.Filled.VisibilityOff else Icons.Filled.Visibility,
+                                    contentDescription = if (showElevationPassword) "Скрыть" else "Показать",
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Text(
+                        if (elevation == Elevation.SU) {
+                            "su подходит, если пользователя нет в sudoers. На Ubuntu у root обычно нет пароля — там нужен sudo."
+                        } else {
+                            "Пользователь должен быть в группе sudo (или в /etc/sudoers)."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = {
+                            rootChecking = true
+                            rootResult = null
+                            rootError = null
+                            scope.launch {
+                                try {
+                                    rootResult = SshManager.testRoot(build())
+                                } catch (e: Exception) {
+                                    rootError = e
+                                } finally {
+                                    rootChecking = false
+                                }
+                            }
+                        },
+                        enabled = valid && !rootChecking,
+                    ) {
+                        if (rootChecking) {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                        } else {
+                            Icon(Icons.Filled.Security, contentDescription = null)
+                        }
+                        Spacer(Modifier.width(8.dp))
+                        Text("Проверить права root")
+                    }
+                    rootResult?.let { Text(it, color = StatusColors.ok, style = MaterialTheme.typography.bodyMedium) }
+                    rootError?.let { ErrorCard(it, onRetry = null, modifier = Modifier.padding(top = 8.dp)) }
                 }
             }
 

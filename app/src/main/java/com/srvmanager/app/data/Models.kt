@@ -8,6 +8,10 @@ import java.util.UUID
 @Serializable
 enum class AuthType { PASSWORD, KEY }
 
+/** Способ получения root, если вход выполнен не под root. */
+@Serializable
+enum class Elevation { SUDO, SU }
+
 @Serializable
 data class GeoInfo(
     val ip: String = "",
@@ -45,10 +49,21 @@ data class Server(
     val notes: String = "",
     val geo: GeoInfo? = null,
     val createdAt: Long = System.currentTimeMillis(),
+    val elevation: Elevation = Elevation.SUDO,
+    /** Для sudo — пароль sudo (пусто = пароль входа), для su — пароль root. */
+    val elevationPassword: String = "",
 ) {
     val displayName: String get() = name.ifBlank { host }
     val address: String get() = "$username@$host" + if (port != 22) ":$port" else ""
-    val isRoot: Boolean get() = username == "root"
+    val isRoot: Boolean get() = username.trim() == "root"
+
+    val elevationLabel: String
+        get() = when {
+            isRoot -> "вход под root"
+            elevation == Elevation.SU -> "su (пароль root)"
+            elevationPassword.isNotEmpty() -> "sudo (отдельный пароль)"
+            else -> "sudo (пароль входа)"
+        }
 }
 
 @Serializable
